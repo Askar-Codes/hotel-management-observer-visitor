@@ -1,0 +1,122 @@
+classDiagram
+direction LR
+
+%% ---------------- OBSERVER SIDE ----------------
+class Event {
+    <<interface>>
+    +type() EventType
+}
+class Observer~E~ {
+    <<interface>>
+    +handleEvent(E event)
+}
+class Subject~E~ {
+    <<interface>>
+    +subscribe(EventType, Observer)
+    +unsubscribe(EventType, Observer)
+}
+class ConcurrentSubject~E~ {
+    -observersByEventType : Map~EventType, CopyOnWriteArrayList~
+    +publishEventToAllSubscribersOfItsType(E event)
+}
+class BookingEventSource {
+    +publishGuestCheckedIn()
+    +publishGuestCheckedOut()
+}
+class RoomStatusEventSource {
+    +publishRoomStatusChanged()
+}
+class FiveImmutableEventRecords {
+    GuestCheckedIn
+    GuestCheckedOut
+    RoomStatusChanged
+    CleaningTaskCreated
+    OccupancyReportPublished
+}
+
+Subject <|.. ConcurrentSubject
+Event <|.. FiveImmutableEventRecords
+ConcurrentSubject <|-- BookingEventSource : source 1
+ConcurrentSubject <|-- RoomStatusEventSource : source 2
+
+%% ---------------- LISTENERS ----------------
+class FrontDeskPanel { <<listener 1>> }
+class HousekeepingBoard { <<listener 2>> }
+class RevenueManager { <<listener 3 and subject>> }
+class GuestApp { <<listener 4>> }
+class AllHotelEventsChronologicalJournal { <<listener 5>> }
+class CheckoutCleaningCoordinator { <<listener and subject>> }
+
+Observer <|.. FrontDeskPanel
+Observer <|.. HousekeepingBoard
+Observer <|.. RevenueManager
+Observer <|.. GuestApp
+Observer <|.. AllHotelEventsChronologicalJournal
+Observer <|.. CheckoutCleaningCoordinator
+ConcurrentSubject <|-- RevenueManager : republishes reports
+ConcurrentSubject <|-- CheckoutCleaningCoordinator : publishes tasks
+
+%% ---------------- VISITOR SIDE ----------------
+class HotelElement {
+    <<interface>>
+    +accept(HotelVisitor~R~) R
+}
+class HotelVisitor~R~ {
+    <<interface>>
+    +visitHotel(Hotel) R
+    +visitFloor(Floor) R
+    +visitRoom(Room) R
+    +visitSuite(Suite) R
+    +visitHall(Hall) R
+    +visitRestaurant(Restaurant) R
+    +visitParkingLot(ParkingLot) R
+}
+class Hotel { <<container>> }
+class Floor { <<container>> }
+class BookableUnit {
+    <<abstract>>
+    -status : RoomStatus
+}
+class Room { <<leaf>> }
+class Suite { <<leaf>> }
+class Hall { <<leaf>> }
+class Restaurant { <<leaf>> }
+class ParkingLot { <<leaf added in trade-off commit 2>> }
+
+HotelElement <|.. Hotel
+HotelElement <|.. Floor
+HotelElement <|.. BookableUnit
+HotelElement <|.. Hall
+HotelElement <|.. Restaurant
+HotelElement <|.. ParkingLot
+BookableUnit <|-- Room
+BookableUnit <|-- Suite
+Hotel o-- Floor : floors
+Floor o-- HotelElement : units
+
+class TotalDailyRevenueCalculatingVisitor { <<numeric result>> }
+class OccupiedUnitsCountingVisitor { <<accumulates state>> }
+class BookableUnitsFilteringVisitor { <<filter, returns list>> }
+class HotelStructureJsonExportVisitor { <<JSON export>> }
+class PublicAreasTotalCapacityCalculatingVisitor { <<added in trade-off commit 1>> }
+
+HotelVisitor <|.. TotalDailyRevenueCalculatingVisitor
+HotelVisitor <|.. OccupiedUnitsCountingVisitor
+HotelVisitor <|.. BookableUnitsFilteringVisitor
+HotelVisitor <|.. HotelStructureJsonExportVisitor
+HotelVisitor <|.. PublicAreasTotalCapacityCalculatingVisitor
+
+%% ---------------- INTEGRATION AND ROOT ----------------
+CheckoutCleaningCoordinator ..> BookableUnitsFilteringVisitor : runs it on ONE floor
+FrontDeskPanel ..> BookableUnitsFilteringVisitor : finds the room to update
+
+class HotelSimulationRunner {
+    -executorService : ExecutorService
+    +publishStayCyclesFromParallelProducers(int, int)
+}
+class HotelApplication {
+    <<composition root>>
+    +main(String[])
+}
+HotelApplication ..> HotelSimulationRunner : creates and wires everything
+HotelSimulationRunner ..> BookingEventSource : producers publish
